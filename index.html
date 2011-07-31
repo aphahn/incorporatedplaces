@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
+        <title>Incorporated Places</title>
+        <style type="text/css">
+            html {
+                height: 100%;
+            }
+
+            body {
+                height: 100%;
+                margin: 0px;
+                padding: 0px;
+            }
+
+            #map {
+                width: 100%;
+                height: 100%;
+            }
+        </style>
+        <script src="https://www.google.com/jsapi?autoload=%7B%22modules%22%3A%5B%7B%22name%22%3A%22maps%22%2C%22version%22%3A%223%22%2C%22other_params%22%3A%22sensor%3Dfalse%22%7D%2C%7B%22name%22%3A%22jquery%22%2C%22version%22%3A%221.6.2%22%7D%5D%7D"></script>
+        <script type="text/javascript">
+            var rand = function(min, max) {
+                return Math.random() * (max - min) + min;
+            };
+
+            $(function() {
+                var desiredZoomIn = 13;
+                var desiredZoomOut = 3;
+                var mapType = google.maps.MapTypeId.ROADMAP;
+
+                var options = {
+                    center: new google.maps.LatLng(44.967243, -103.771556),
+                    disableDefaultUI: true,
+                    disableDoubleClickZoom: true,
+                    draggable: false,
+                    keyboardShortcuts: false,
+                    mapTypeId: mapType,
+                    scrollwheel: false,
+                    zoom: desiredZoomOut
+                };
+
+                var map = new google.maps.Map(document.getElementById('map'), options);
+
+                google.maps.event.addListener(map, 'click', function(e) {
+                        switch (mapType) {
+                        case google.maps.MapTypeId.ROADMAP:
+                            mapType = google.maps.MapTypeId.SATELLITE;
+                            break;
+                        case google.maps.MapTypeId.SATELLITE:
+                            mapType = google.maps.MapTypeId.HYBRID;
+                            break;
+                        case google.maps.MapTypeId.HYBRID:
+                            mapType = google.maps.MapTypeId.ROADMAP;
+                            break;
+                        }
+                        map.setMapTypeId(mapType);
+                    });
+
+                var magnitude = 5;
+                var vector = [magnitude, 0];
+                var makeNewVector = function() {
+                    // Create a new random vector
+                    var angle = Math.random() * 2 * Math.PI;
+                    vector[0] = magnitude * Math.sin(angle);
+                    vector[1] = magnitude * Math.cos(angle);
+                };
+
+                var panEnabled = false;
+                var transitionDelay = 1000;
+                var zoomTo = function(loc) {
+                    // Turn panning off while zooming
+                    panEnabled = false;
+
+                    // Start zooming out
+                    var zoomOutListener = google.maps.event.addListener(map, 'tilesloaded', function() {
+                            var zoom = map.getZoom();
+                            if (zoom <= desiredZoomOut) {
+                                google.maps.event.removeListener(zoomOutListener);
+                                google.maps.event.addListenerOnce(map, 'idle', function() {
+                                        // Once we've panned, start zooming in
+                                        var zoomInListener = google.maps.event.addListener(map, 'tilesloaded', function() {
+                                                var zoom = map.getZoom();
+                                                if (zoom >= desiredZoomIn) {
+                                                    panEnabled = true;
+                                                    google.maps.event.removeListener(zoomInListener);
+                                                } else {
+                                                    setTimeout(function() { map.setZoom(zoom + 1); }, transitionDelay);
+                                                }
+                                            });
+
+                                        // Trigger zoom in
+                                        google.maps.event.trigger(map, 'tilesloaded');
+                                    });
+                                setTimeout(function() { map.panTo(loc); }, transitionDelay);
+                            } else {
+                                setTimeout(function() { map.setZoom(zoom - 1); }, transitionDelay);
+                            }
+                        });
+
+                    // Trigger zoom out
+                    google.maps.event.trigger(map, 'tilesloaded');
+                };
+
+                // Load the places data
+                $.getJSON("places.js",
+                    function(data) {
+                        // Turn on panning once we have data
+                        setInterval(function() {
+                            if (panEnabled) {
+                                map.panBy(vector[0] * magnitude, vector[1] * magnitude);
+                            }
+                        }, 1000);
+
+
+                        // When we've got the data, load a new place every minute
+                        var callback = function() {
+                            /*
+                               Format of `data`:
+                               {
+                                    totalPopulation: 192213590,
+                                    placeData: [
+                                        [population counter, "Place name", state code (0--49)],
+                                        ...
+                                        [population counter, "Place name", state code (0--49)]
+                                    ],
+                                    stateNames: ["Alabama", "Alaska", ..., "Wyoming"]
+                               }
+                            */
+                            var person = Math.floor(rand(0, data.totalPopulation));
+
+                            var i = 0;
+                            while (data.placeData[i][0] < person) {
+                                ++i;
+                            }
+
+                            var place = data.placeData[i];
+                            var name = place[1] + ", " + data.stateNames[place[2]];
+
+                            var geocoder = new google.maps.Geocoder();
+                            geocoder.geocode({address: name},
+                                function(results, status) {
+                                    if (status != google.maps.GeocoderStatus.OK) {
+                                        return;
+                                    }
+                                    zoomTo(results[0].geometry.location);
+                                    makeNewVector();
+                                });
+                        };
+
+                        callback();
+                        setInterval(callback, 90000);
+                    });
+            });
+        </script>
+        <script type="text/javascript">
+
+        var _gaq = _gaq || [];
+        _gaq.push(['_setAccount', 'UA-6082545-1']);
+        _gaq.push(['_trackPageview']);
+
+        (function() {
+            var ga = document.createElement('script'); ga.type = 'text/javascript'; ga.async = true;
+            ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
+            var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
+        })();
+
+        </script>
+    </head>
+    <body>
+        <div id="map"></div>
+    </body>
+</html>
